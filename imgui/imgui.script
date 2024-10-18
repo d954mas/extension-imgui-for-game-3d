@@ -1,3 +1,4 @@
+---@diagnostic disable: unused-local, global-element, lowercase-global
 go.property("acquire_input_focus", true)
 
 local LEFT_MOUSE = hash("mouse_button_left")

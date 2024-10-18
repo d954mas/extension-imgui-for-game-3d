@@ -3,6 +3,7 @@
 
 #include "imgui/imgui.h"
 #include "imgui/imconfig.h"
+#include "imgui/imguizmo.h"
 
 // set in imconfig.h
 #if defined(IMGUI_IMPL_OPENGL_LOADER_GL3W)
@@ -679,11 +680,17 @@ static int imgui_EndChild(lua_State* L)
 
 static int imgui_BeginPopupContextItem(lua_State* L)
 {
-    DM_LUA_STACK_CHECK(L, 1);
     imgui_NewFrame();
-    const char* id = luaL_checkstring(L, 1);
-    bool result = ImGui::BeginPopupContextItem(id);
-    lua_pushboolean(L, result);
+    //if stack 1 then
+    int stack = lua_gettop(L);
+    if(stack == 1){
+        const char* id = luaL_checkstring(L, 1);
+        bool result = ImGui::BeginPopupContextItem(id);
+        lua_pushboolean(L, result);
+    }else{
+        bool result = ImGui::BeginPopupContextItem();
+        lua_pushboolean(L, result);
+    }
     return 1;
 }
 
@@ -1485,6 +1492,106 @@ static int imgui_MenuItem(lua_State* L)
     lua_pushboolean(L, selected);
 
     return 2;
+}
+
+void Matrix4ToFloatArray(const dmVMath::Matrix4& matrix, float* outArray) {
+    // Retrieve the columns of the matrix
+    dmVMath::Vector4 col0 = matrix.getCol0();
+    dmVMath::Vector4 col1 = matrix.getCol1();
+    dmVMath::Vector4 col2 = matrix.getCol2();
+    dmVMath::Vector4 col3 = matrix.getCol3();
+
+    // Fill the output array in column-major order
+    outArray[0]  = col0.getX();
+    outArray[1]  = col0.getY();
+    outArray[2]  = col0.getZ();
+    outArray[3]  = col0.getW();
+
+    outArray[4]  = col1.getX();
+    outArray[5]  = col1.getY();
+    outArray[6]  = col1.getZ();
+    outArray[7]  = col1.getW();
+
+    outArray[8]  = col2.getX();
+    outArray[9]  = col2.getY();
+    outArray[10] = col2.getZ();
+    outArray[11] = col2.getW();
+
+    outArray[12] = col3.getX();
+    outArray[13] = col3.getY();
+    outArray[14] = col3.getZ();
+    outArray[15] = col3.getW();
+}
+
+static int imgui_Gizmo(lua_State* L) {
+    //DM_LUA_STACK_CHECK(L, 1);
+    int argc = lua_gettop(L);
+
+    const char* id = luaL_checkstring(L, 1);
+    uint32_t mode = luaL_checkinteger(L, 2);
+    uint32_t operation = luaL_checkinteger(L, 3);
+    
+    // Extract the matrices from the Lua stack
+    dmVMath::Matrix4 view = *dmScript::CheckMatrix4(L, 4);
+    dmVMath::Matrix4 projection = *dmScript::CheckMatrix4(L, 5);
+    dmVMath::Matrix4* gizmoMatrix = dmScript::CheckMatrix4(L, 6);
+
+    // Convert the matrices to float arrays that ImGuizmo can use
+    float viewMatrix[16];
+    float projectionMatrix[16];
+    float modelMatrix[16];
+
+    Matrix4ToFloatArray(view, viewMatrix);
+    Matrix4ToFloatArray(projection, projectionMatrix);
+    Matrix4ToFloatArray(*gizmoMatrix, modelMatrix);
+
+    // Set up gizmo operation, mode, and snapping settings
+    ImGuizmo::OPERATION mCurrentGizmoOperation = static_cast<ImGuizmo::OPERATION>(operation);
+    ImGuizmo::MODE mCurrentGizmoMode = static_cast<ImGuizmo::MODE>(mode);
+    bool snap = false;
+    float snap_values[3] = {0.1f, 0.1f, 0.01f};
+
+    ImGuizmo::PushID(id);   
+
+    imgui_NewFrame();
+    ImGuizmo::BeginFrame();
+
+    // Set the size of the gizmo manipulation area to the entire screen
+    ImGuiIO& io = ImGui::GetIO();
+    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+
+    float deltaMatrix[16];
+    // Apply the gizmo to the model matrix
+    bool manipulate = ImGuizmo::Manipulate(viewMatrix, projectionMatrix, mCurrentGizmoOperation, mCurrentGizmoMode, modelMatrix, deltaMatrix, snap ? snap_values : NULL);
+
+
+    // Copy the manipulated model matrix back to the Matrix4 type
+    //gizmoMatrix->setCol0(dmVMath::Vector4(modelMatrix[0], modelMatrix[1], modelMatrix[2], modelMatrix[3]));
+   // gizmoMatrix->setCol1(dmVMath::Vector4(modelMatrix[4], modelMatrix[5], modelMatrix[6], modelMatrix[7]));
+  //  gizmoMatrix->setCol2(dmVMath::Vector4(modelMatrix[8], modelMatrix[9], modelMatrix[10], modelMatrix[11]));
+   // gizmoMatrix->setCol3(dmVMath::Vector4(modelMatrix[12], modelMatrix[13], modelMatrix[14], modelMatrix[15]));
+    lua_pushboolean(L, manipulate);
+    if(manipulate){
+          // Convert the delta matrix to vmath.matrix4
+        dmVMath::Matrix4 delta_matrix = dmVMath::Matrix4(
+            dmVMath::Vector4(deltaMatrix[0], deltaMatrix[1], deltaMatrix[2], deltaMatrix[3]),
+            dmVMath::Vector4(deltaMatrix[4], deltaMatrix[5], deltaMatrix[6], deltaMatrix[7]),
+            dmVMath::Vector4(deltaMatrix[8], deltaMatrix[9], deltaMatrix[10], deltaMatrix[11]),
+            dmVMath::Vector4(deltaMatrix[12], deltaMatrix[13], deltaMatrix[14], deltaMatrix[15])
+        );
+
+        // Push the delta matrix to the Lua stack
+        dmScript::PushMatrix4(L, delta_matrix);
+
+    }
+    ImGuizmo::PopID();
+    return manipulate ? 2 : 1;
+}
+
+static int imgui_Gizmo_is_using_any(lua_State* L){
+    DM_LUA_STACK_CHECK(L, 1);
+    lua_pushboolean(L, ImGuizmo::IsUsingAny());
+    return 1;
 }
 
 // ----------------------------
@@ -2708,6 +2815,8 @@ static const luaL_reg Module_methods[] =
     {"begin_menu", imgui_BeginMenu},
     {"end_menu", imgui_EndMenu},
     {"menu_item", imgui_MenuItem},
+    {"gizmo", imgui_Gizmo},
+    {"gizmo_is_using_any", imgui_Gizmo_is_using_any},
 
     {"same_line", imgui_SameLine},
     {"new_line", imgui_NewLine},
@@ -2922,6 +3031,28 @@ static void LuaInit(lua_State* L)
     lua_setfieldstringint(L, "ImGuiCol_NavWindowingHighlight", ImGuiCol_NavWindowingHighlight);
     lua_setfieldstringint(L, "ImGuiCol_NavWindowingDimBg", ImGuiCol_NavWindowingDimBg);
     lua_setfieldstringint(L, "ImGuiCol_ModalWindowDimBg", ImGuiCol_ModalWindowDimBg);
+    lua_setfieldstringint(L, "ImGuiGizmo_MODE_WORLD", ImGuizmo::MODE::WORLD);
+    lua_setfieldstringint(L, "ImGuiGizmo_MODE_LOCAL", ImGuizmo::MODE::LOCAL);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_TRANSLATE", ImGuizmo::OPERATION::TRANSLATE);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_ROTATE", ImGuizmo::OPERATION::ROTATE);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE", ImGuizmo::OPERATION::SCALE);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALEU", ImGuizmo::OPERATION::SCALEU);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_UNIVERSAL", ImGuizmo::OPERATION::UNIVERSAL);
+
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_TRANSLATE_X", ImGuizmo::OPERATION::TRANSLATE_X);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_TRANSLATE_Y", ImGuizmo::OPERATION::TRANSLATE_Y);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_TRANSLATE_Z", ImGuizmo::OPERATION::TRANSLATE_Z);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_ROTATE_X", ImGuizmo::OPERATION::ROTATE_X);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_ROTATE_Y", ImGuizmo::OPERATION::ROTATE_Y);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_ROTATE_Z", ImGuizmo::OPERATION::ROTATE_Z);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_ROTATE_SCREEN", ImGuizmo::OPERATION::ROTATE_SCREEN);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE_X", ImGuizmo::OPERATION::SCALE_X);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE_Y", ImGuizmo::OPERATION::SCALE_Y);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE_Z", ImGuizmo::OPERATION::SCALE_Z);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_BOUNDS", ImGuizmo::OPERATION::BOUNDS);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE_XU", ImGuizmo::OPERATION::SCALE_XU);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE_YU", ImGuizmo::OPERATION::SCALE_YU);
+    lua_setfieldstringint(L, "ImGuiGizmo_OPERATION_SCALE_ZU", ImGuizmo::OPERATION::SCALE_ZU);
 
     lua_setfieldstringint(L, "TABLECOLUMN_NONE", ImGuiTableColumnFlags_None);
     lua_setfieldstringint(L, "TABLECOLUMN_DEFAULTHIDE", ImGuiTableColumnFlags_DefaultHide);   // Default as a hidden/disabled column.
@@ -3096,6 +3227,7 @@ dmExtension::Result InitializeDefoldImGui(dmExtension::Params* params)
     float displayWidth = dmConfigFile::GetFloat(params->m_ConfigFile, "display.width", 960.0f);
     float displayHeight = dmConfigFile::GetFloat(params->m_ConfigFile, "display.height", 540.0f);
     imgui_Init(displayWidth, displayHeight);
+    ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
 
     return dmExtension::RESULT_OK;
 }
