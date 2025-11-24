@@ -2721,6 +2721,16 @@ static void imgui_ExtensionShutdown()
     g_imgui_Fonts.SetSize(0);
 }
 
+//OTHER IMPROVEMENTS
+
+static int imgui_SetItemDefaultFocus(lua_State* L)
+{
+    DM_LUA_STACK_CHECK(L, 0);
+    imgui_NewFrame();
+    ImGui::SetItemDefaultFocus();
+    return 0;
+}
+
 // Functions exposed to Lua
 static const luaL_reg Module_methods[] =
 {
@@ -2891,6 +2901,7 @@ static const luaL_reg Module_methods[] =
     {"get_frame_height", imgui_GetFrameHeight},
 
     {"set_scroll_here_y", imgui_SetScrollHereY},
+    {"set_item_default_focus", imgui_SetItemDefaultFocus},
     {0, 0}
 };
 
