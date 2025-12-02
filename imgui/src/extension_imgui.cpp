@@ -1233,11 +1233,6 @@ static int imgui_InputInt4(lua_State* L)
     return 5;
 }
 
-        lua_pushnil(L);
-    }
-    return 2;
-}
-
 static int imgui_InputInt2(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 3);
