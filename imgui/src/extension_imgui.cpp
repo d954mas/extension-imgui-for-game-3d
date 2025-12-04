@@ -1343,7 +1343,81 @@ static int imgui_SliderFloat(lua_State* L)
     }
     return 2;
 }
-    
+
+static int imgui_SliderFloat3(lua_State* L)
+{
+    DM_LUA_STACK_CHECK(L, 4);
+    imgui_NewFrame();
+    const char* label = luaL_checkstring(L, 1);
+    float v[3];
+    v[0] = luaL_checknumber(L, 2);
+    v[1] = luaL_checknumber(L, 3);
+    v[2] = luaL_checknumber(L, 4);
+    float min = luaL_checknumber(L, 5);
+    float max = luaL_checknumber(L, 6);
+    char float_precision[20] = { "%.6f" };
+
+    if (lua_isnumber(L, 7))
+    {
+        int precision_count = lua_tointeger(L, 7);
+        dmSnPrintf(float_precision, sizeof(float_precision), "%%.%df", precision_count);
+    }
+
+    bool changed = ImGui::SliderFloat3(label, v, min, max, float_precision);
+    lua_pushboolean(L, changed);
+    if (changed)
+    {
+        lua_pushnumber(L, v[0]);
+        lua_pushnumber(L, v[1]);
+        lua_pushnumber(L, v[2]);
+    }
+    else
+    {
+        lua_pushnil(L);
+        lua_pushnil(L);
+        lua_pushnil(L);
+    }
+    return 4;
+}
+
+static int imgui_SliderFloat4(lua_State* L)
+{
+    DM_LUA_STACK_CHECK(L, 5);
+    imgui_NewFrame();
+    const char* label = luaL_checkstring(L, 1);
+    float v[4];
+    v[0] = luaL_checknumber(L, 2);
+    v[1] = luaL_checknumber(L, 3);
+    v[2] = luaL_checknumber(L, 4);
+    v[3] = luaL_checknumber(L, 5);
+    float min = luaL_checknumber(L, 6);
+    float max = luaL_checknumber(L, 7);
+    char float_precision[20] = { "%.6f" };
+
+    if (lua_isnumber(L, 8))
+    {
+        int precision_count = lua_tointeger(L, 8);
+        dmSnPrintf(float_precision, sizeof(float_precision), "%%.%df", precision_count);
+    }
+
+    bool changed = ImGui::SliderFloat4(label, v, min, max, float_precision);
+    lua_pushboolean(L, changed);
+    if (changed)
+    {
+        lua_pushnumber(L, v[0]);
+        lua_pushnumber(L, v[1]);
+        lua_pushnumber(L, v[2]);
+        lua_pushnumber(L, v[3]);
+    }
+    else
+    {
+        lua_pushnil(L);
+        lua_pushnil(L);
+        lua_pushnil(L);
+        lua_pushnil(L);
+    }
+    return 5;
+}
 
 static int imgui_Selectable(lua_State* L)
 {
@@ -2839,6 +2913,8 @@ static const luaL_reg Module_methods[] =
     {"input_float3", imgui_InputFloat3},
     {"input_float4", imgui_InputFloat4},
     {"slider_float", imgui_SliderFloat},
+    {"slider_float3", imgui_SliderFloat3},
+    {"slider_float4", imgui_SliderFloat4},
     {"button", imgui_Button},
     {"button_image", imgui_ButtonImage},
     {"checkbox", imgui_Checkbox},
